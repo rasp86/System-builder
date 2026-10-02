@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M0,0h108v108h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="0"
+                android:startY="0"
+                android:endX="108"
+                android:endY="108"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#0D1117" />
+                <item android:offset="0.5" android:color="#161B22" />
+                <item android:offset="1.0" android:color="#0A0C10" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- Circuit grid patterns -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M18,18L90,18 M18,36L90,36 M18,54L90,54 M18,72L90,72 M18,90L90,90"
+        android:strokeWidth="0.5"
+        android:strokeColor="#1F6FEB"
+        android:strokeAlpha="0.25" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M18,18L18,90 M36,18L36,90 M54,18L54,90 M72,18L72,90 M90,18L90,90"
+        android:strokeWidth="0.5"
+        android:strokeColor="#1F6FEB"
+        android:strokeAlpha="0.25" />
+</vector>
+
