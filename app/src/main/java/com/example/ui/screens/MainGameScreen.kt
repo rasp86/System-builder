@@ -349,6 +349,7 @@ fun MainGameScreen(
                     TerminalScreen(
                         lines = terminalLines,
                         scanlinesEnabled = gameSave?.crtScanlinesEnabled ?: true,
+                        colorScheme = gameSave?.terminalColorScheme ?: "CYBER_MATRIX",
                         onExecuteCommand = { viewModel.executeTerminalCommand(it) }
                     )
                 }

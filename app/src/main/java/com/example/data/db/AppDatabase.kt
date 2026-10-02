@@ -12,7 +12,7 @@ import androidx.room.RoomDatabase
         VirtualFileEntity::class,
         AiMessageEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

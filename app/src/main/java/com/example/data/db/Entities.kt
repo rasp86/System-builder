@@ -13,6 +13,7 @@ data class GameSaveEntity(
     val bits: Int = 100,
     val currentPhase: Int = 1,
     val crtScanlinesEnabled: Boolean = true,
+    val terminalColorScheme: String = "CYBER_MATRIX",
     val soundHapticsEnabled: Boolean = true,
     val bootCount: Int = 0,
     val bugsFixed: Int = 0,

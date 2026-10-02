@@ -136,7 +136,7 @@ class GeminiRepository {
         generateOfflineArchitectResponse(userPrompt, currentQuestContext, codeContext)
     }
 
-    private fun generateOfflineArchitectResponse(
+    internal fun generateOfflineArchitectResponse(
         prompt: String,
         questContext: String,
         codeContext: String

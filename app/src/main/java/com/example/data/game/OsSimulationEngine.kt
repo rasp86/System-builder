@@ -1,21 +1,5 @@
 package com.example.data.game
 
-data class TerminalLine(
-    val text: String,
-    val type: TerminalLineType = TerminalLineType.OUTPUT
-)
-
-enum class TerminalLineType {
-    INPUT,
-    OUTPUT,
-    SUCCESS,
-    ERROR,
-    WARNING,
-    HEADER,
-    MATRIX,
-    SYSTEM
-}
-
 object OsSimulationEngine {
 
     fun generateBootSequence(

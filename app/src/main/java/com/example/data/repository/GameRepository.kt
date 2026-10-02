@@ -1,7 +1,8 @@
 package com.example.data.repository
 
 import com.example.data.ai.AiMentorResult
-import com.example.data.ai.GeminiRepository
+import com.example.data.ai.AiMentorService
+import com.example.data.ai.GeminiAiMentorService
 import com.example.data.db.AiMessageEntity
 import com.example.data.db.AppDatabase
 import com.example.data.db.GameSaveEntity
@@ -16,7 +17,7 @@ import kotlinx.coroutines.flow.firstOrNull
 
 class GameRepository(
     private val database: AppDatabase,
-    private val geminiRepository: GeminiRepository = GeminiRepository()
+    private val aiMentorService: AiMentorService = GeminiAiMentorService()
 ) {
     private val gameDao = database.gameDao()
 
@@ -151,6 +152,11 @@ class GameRepository(
         gameDao.updateGameSave(save.copy(crtScanlinesEnabled = !save.crtScanlinesEnabled))
     }
 
+    suspend fun updateTerminalColorScheme(schemeKey: String) {
+        val save = gameDao.getGameSaveSync() ?: return
+        gameDao.updateGameSave(save.copy(terminalColorScheme = schemeKey))
+    }
+
     suspend fun incrementBootCount() {
         val save = gameDao.getGameSaveSync() ?: return
         gameDao.updateGameSave(save.copy(bootCount = save.bootCount + 1))
@@ -167,9 +173,9 @@ class GameRepository(
             )
         )
 
-        val result = geminiRepository.askKernelArchitectMentor(
+        val result = aiMentorService.askMentor(
             userPrompt = prompt,
-            currentQuestContext = currentQuest?.let { "${it.title} (${it.category})" } ?: "General OS Architecture",
+            questContext = currentQuest?.let { "${it.title} (${it.category})" } ?: "General OS Architecture",
             codeContext = code
         )
 

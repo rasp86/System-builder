@@ -160,14 +160,16 @@ fun TerminalView(
             ) {
                 items(lines) { line ->
                     val color = when (line.type) {
-                        TerminalLineType.INPUT -> CyberCyan
+                        TerminalLineType.INPUT, TerminalLineType.COMMAND -> CyberCyan
                         TerminalLineType.SUCCESS -> CyberGreen
                         TerminalLineType.ERROR -> CyberPink
                         TerminalLineType.WARNING -> CyberAmber
                         TerminalLineType.HEADER -> CyberPurple
                         TerminalLineType.SYSTEM -> Color(0xFF93C5FD)
                         TerminalLineType.MATRIX -> CyberGreen
+                        TerminalLineType.DIFF -> Color(0xFFFDE047)
                         TerminalLineType.OUTPUT -> TextPrimary
+                        else -> TextPrimary
                     }
                     Text(
                         text = line.text,

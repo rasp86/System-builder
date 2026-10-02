@@ -35,6 +35,8 @@ import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.StopCircle
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -61,6 +63,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
@@ -78,6 +81,7 @@ import com.example.data.game.TerminalEngine
 import com.example.data.game.TerminalLine
 import com.example.data.game.TerminalLineType
 import com.example.ui.components.CpuHardwareVisualizer
+import com.example.ui.components.CpuLoadRealtimeGraph
 import com.example.ui.theme.ConsoleBackground
 import com.example.ui.theme.ConsoleBorder
 import com.example.ui.theme.CyberAmber
@@ -86,6 +90,9 @@ import com.example.ui.theme.CyberCyanDark
 import com.example.ui.theme.CyberGreen
 import com.example.ui.theme.CyberPink
 import com.example.ui.theme.CyberPurple
+import com.example.ui.theme.TerminalThemeId
+import com.example.ui.theme.TerminalThemePalette
+import com.example.ui.theme.TerminalThemes
 import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
@@ -94,9 +101,13 @@ import java.util.regex.Pattern
 /**
  * Builds an AnnotatedString with dynamic color highlights for keywords:
  * 'error', 'failed', 'panic', 'success', 'pass', 'ok', 'warning', 'warn',
- * memory hex addresses ('0x...'), registers, and hardware concepts.
+ * memory hex addresses ('0x...'), registers, comments, and hardware concepts.
  */
-fun highlightTerminalKeywords(text: String, baseColor: Color): AnnotatedString {
+fun highlightTerminalKeywords(
+    text: String,
+    baseColor: Color,
+    palette: TerminalThemePalette = TerminalThemes.CyberMatrix
+): AnnotatedString {
     return buildAnnotatedString {
         append(text)
 
@@ -105,18 +116,18 @@ fun highlightTerminalKeywords(text: String, baseColor: Color): AnnotatedString {
         val dmesgTimeMatcher = dmesgTimePattern.matcher(text)
         while (dmesgTimeMatcher.find()) {
             addStyle(
-                style = SpanStyle(color = CyberCyan, fontWeight = FontWeight.Bold),
+                style = SpanStyle(color = palette.inputPromptColor, fontWeight = FontWeight.Bold),
                 start = dmesgTimeMatcher.start(),
                 end = dmesgTimeMatcher.end()
             )
         }
 
         // Highlight error tokens
-        val errorPattern = Pattern.compile("(?i)\\b(error|failed|fail|fatal|panic|exception|fault)\\b")
+        val errorPattern = Pattern.compile("(?i)\\b(error|failed|fail|fatal|panic|exception|fault|sigint)\\b")
         val errorMatcher = errorPattern.matcher(text)
         while (errorMatcher.find()) {
             addStyle(
-                style = SpanStyle(color = CyberPink, fontWeight = FontWeight.Bold),
+                style = SpanStyle(color = palette.errorColor, fontWeight = FontWeight.Bold),
                 start = errorMatcher.start(),
                 end = errorMatcher.end()
             )
@@ -127,7 +138,7 @@ fun highlightTerminalKeywords(text: String, baseColor: Color): AnnotatedString {
         val successMatcher = successPattern.matcher(text)
         while (successMatcher.find()) {
             addStyle(
-                style = SpanStyle(color = CyberGreen, fontWeight = FontWeight.Bold),
+                style = SpanStyle(color = palette.successColor, fontWeight = FontWeight.Bold),
                 start = successMatcher.start(),
                 end = successMatcher.end()
             )
@@ -138,7 +149,7 @@ fun highlightTerminalKeywords(text: String, baseColor: Color): AnnotatedString {
         val warningMatcher = warningPattern.matcher(text)
         while (warningMatcher.find()) {
             addStyle(
-                style = SpanStyle(color = CyberAmber, fontWeight = FontWeight.Bold),
+                style = SpanStyle(color = palette.warningColor, fontWeight = FontWeight.Bold),
                 start = warningMatcher.start(),
                 end = warningMatcher.end()
             )
@@ -149,7 +160,7 @@ fun highlightTerminalKeywords(text: String, baseColor: Color): AnnotatedString {
         val hexMatcher = hexPattern.matcher(text)
         while (hexMatcher.find()) {
             addStyle(
-                style = SpanStyle(color = CyberPurple, fontWeight = FontWeight.SemiBold),
+                style = SpanStyle(color = palette.headerColor, fontWeight = FontWeight.SemiBold),
                 start = hexMatcher.start(),
                 end = hexMatcher.end()
             )
@@ -160,7 +171,7 @@ fun highlightTerminalKeywords(text: String, baseColor: Color): AnnotatedString {
         val regMatcher = regPattern.matcher(text)
         while (regMatcher.find()) {
             addStyle(
-                style = SpanStyle(color = CyberAmber, fontWeight = FontWeight.Bold),
+                style = SpanStyle(color = palette.warningColor, fontWeight = FontWeight.Bold),
                 start = regMatcher.start(),
                 end = regMatcher.end()
             )
@@ -171,9 +182,53 @@ fun highlightTerminalKeywords(text: String, baseColor: Color): AnnotatedString {
         val systemMatcher = systemPattern.matcher(text)
         while (systemMatcher.find()) {
             addStyle(
-                style = SpanStyle(color = CyberCyan, fontWeight = FontWeight.SemiBold),
+                style = SpanStyle(color = palette.inputPromptColor, fontWeight = FontWeight.SemiBold),
                 start = systemMatcher.start(),
                 end = systemMatcher.end()
+            )
+        }
+
+        // Highlight comments (; ... or // ...)
+        val commentPattern = Pattern.compile("(;.*|//.*)")
+        val commentMatcher = commentPattern.matcher(text)
+        while (commentMatcher.find()) {
+            addStyle(
+                style = SpanStyle(color = Color(0xFF8B949E), fontStyle = androidx.compose.ui.text.font.FontStyle.Italic),
+                start = commentMatcher.start(),
+                end = commentMatcher.end()
+            )
+        }
+
+        // Highlight assembly labels (e.g., start:, print_loop:, init_gdt:)
+        val labelPattern = Pattern.compile("\\b([a-zA-Z_][a-zA-Z0-9_]*):")
+        val labelMatcher = labelPattern.matcher(text)
+        while (labelMatcher.find()) {
+            addStyle(
+                style = SpanStyle(color = palette.headerColor, fontWeight = FontWeight.Bold),
+                start = labelMatcher.start(),
+                end = labelMatcher.end()
+            )
+        }
+
+        // Highlight strings ("..." or '...')
+        val stringPattern = Pattern.compile("(\"[^\"]*\"|'[^']*')")
+        val stringMatcher = stringPattern.matcher(text)
+        while (stringMatcher.find()) {
+            addStyle(
+                style = SpanStyle(color = Color(0xFF50FA7B)),
+                start = stringMatcher.start(),
+                end = stringMatcher.end()
+            )
+        }
+
+        // Highlight common assembly keywords (MOV, PUSH, POP, ADD, SUB, XOR, JMP, NOP, etc.)
+        val asmKeywordPattern = Pattern.compile("(?i)\\b(mov|push|pop|add|sub|xor|and|or|inc|dec|jmp|jz|jnz|je|jne|call|ret|nop|cli|sti|hlt|int|iret|pushad|popad|pushfd|popfd|cld|std|lgdt|lidt|lodsb|stosb|movsb|dw|db|dd|resb|resw|resd|times|org|bits|section|global|extern|equ)\\b")
+        val asmKeywordMatcher = asmKeywordPattern.matcher(text)
+        while (asmKeywordMatcher.find()) {
+            addStyle(
+                style = SpanStyle(color = Color(0xFFFFD166), fontWeight = FontWeight.Bold),
+                start = asmKeywordMatcher.start(),
+                end = asmKeywordMatcher.end()
             )
         }
     }
@@ -181,8 +236,9 @@ fun highlightTerminalKeywords(text: String, baseColor: Color): AnnotatedString {
 
 /**
  * TerminalScreen composable mimicking a command-line interface (CLI)
- * with CPU clockspeed/cycle visualizer, 'dmesg' kernel log viewer, 'man' manual pages,
- * interactive memory cell grid editing, simulated assembler 'asm', and dynamic syntax coloring.
+ * with CPU clockspeed/cycle visualizer, 'ps' process manager, 'dmesg' kernel log viewer, 'man' manual pages,
+ * interactive memory cell grid editing, simulated assembler 'asm', Ctrl+L & Ctrl+C shortcut handling,
+ * and customizable Color Schemes (Retro Green, Classic Amber, Monochrome, Cyberpunk Matrix, Solarized Dark).
  */
 @Composable
 fun TerminalScreen(
@@ -191,6 +247,7 @@ fun TerminalScreen(
     lines: List<TerminalLine>,
     promptPrefix: String = "dev@genesis-os:~$ ",
     scanlinesEnabled: Boolean = true,
+    colorScheme: String = "CYBER_MATRIX",
     onExecuteCommand: (String) -> Unit
 ) {
     val terminalEngine = remember { TerminalEngine() }
@@ -198,6 +255,12 @@ fun TerminalScreen(
     val listState = rememberLazyListState()
     val commandHistory = remember { mutableStateListOf<String>() }
     var historyIndex by remember { mutableStateOf(-1) }
+
+    // Active Theme Palette (tracks either engine theme or prop)
+    var selectedThemeKey by remember(colorScheme) { mutableStateOf(colorScheme) }
+    val activePalette = remember(selectedThemeKey, terminalEngine.currentThemeId) {
+        TerminalThemes.getPaletteById(terminalEngine.currentThemeId.ifBlank { selectedThemeKey })
+    }
 
     // Interactive Memory Grid & Hex Cell Editor State
     var showMemoryGridDialog by remember { mutableStateOf(false) }
@@ -209,6 +272,10 @@ fun TerminalScreen(
     // Man Manual Pages Viewer State
     var showManModal by remember { mutableStateOf(false) }
     var selectedManPage by remember { mutableStateOf("man") }
+    var showCpuGraph by remember { mutableStateOf(true) }
+
+    // Color Scheme Selector Modal
+    var showThemeModal by remember { mutableStateOf(false) }
 
     // Dynamic Tab Completion Suggestions based on current input text
     val tabSuggestions by remember(currentInput) {
@@ -255,7 +322,7 @@ fun TerminalScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(ConsoleBackground)
+            .background(activePalette.backgroundColor)
             .then(
                 if (scanlinesEnabled) {
                     Modifier.drawWithContent {
@@ -276,12 +343,12 @@ fun TerminalScreen(
             )
     ) {
         Column(modifier = Modifier.fillMaxSize().padding(6.dp)) {
-            // Top Window Bar with retro terminal aesthetic & Tools (DMESG, MAN, MEM GRID, CLEAR)
+            // Top Window Bar with retro terminal aesthetic & Tools (PS, DMESG, MAN, THEME, MEM, CHART, CLEAR)
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-                color = Color(0xFF0D1527),
+                color = activePalette.windowHeaderColor,
                 shape = RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, ConsoleBorder)
+                border = androidx.compose.foundation.BorderStroke(1.dp, activePalette.borderColor)
             ) {
                 Row(
                     modifier = Modifier
@@ -301,13 +368,13 @@ fun TerminalScreen(
                         Icon(
                             imageVector = Icons.Default.Terminal,
                             contentDescription = null,
-                            tint = CyberCyan,
+                            tint = activePalette.inputPromptColor,
                             modifier = Modifier.size(15.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
                             text = title,
-                            color = CyberCyan,
+                            color = activePalette.inputPromptColor,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace,
@@ -315,17 +382,28 @@ fun TerminalScreen(
                         )
                     }
 
-                    // Top Action Tools: DMESG, MAN, MEM GRID, CLEAR
+                    // Top Action Tools: PS, DMESG, MAN, THEME, MEM GRID, CHART, CLEAR
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            modifier = Modifier
+                                .clickable { onExecuteCommand("ps") }
+                                .testTag("top_ps_btn"),
+                            color = activePalette.chipBgColor,
+                            shape = RoundedCornerShape(4.dp),
+                            border = androidx.compose.foundation.BorderStroke(0.5.dp, activePalette.chipBorderColor)
+                        ) {
+                            Text("PS", color = activePalette.chipTextColor, fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp))
+                        }
+
                         Surface(
                             modifier = Modifier
                                 .clickable { onExecuteCommand("dmesg") }
                                 .testTag("top_dmesg_btn"),
-                            color = Color(0xFF132238),
+                            color = activePalette.chipBgColor,
                             shape = RoundedCornerShape(4.dp),
-                            border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0xFF254B7A))
+                            border = androidx.compose.foundation.BorderStroke(0.5.dp, activePalette.chipBorderColor)
                         ) {
-                            Text("DMESG", color = Color(0xFF93C5FD), fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp))
+                            Text("DMESG", color = activePalette.dmesgColor, fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp))
                         }
 
                         Surface(
@@ -335,17 +413,35 @@ fun TerminalScreen(
                                     selectedManPage = "man"
                                 }
                                 .testTag("top_man_btn"),
-                            color = Color(0xFF1E283D),
+                            color = activePalette.chipBgColor,
                             shape = RoundedCornerShape(4.dp),
-                            border = androidx.compose.foundation.BorderStroke(0.5.dp, CyberCyan)
+                            border = androidx.compose.foundation.BorderStroke(0.5.dp, activePalette.inputPromptColor)
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = "Podręcznik man", tint = CyberCyan, modifier = Modifier.size(11.dp))
+                                Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = "Podręcznik man", tint = activePalette.inputPromptColor, modifier = Modifier.size(11.dp))
                                 Spacer(modifier = Modifier.width(2.dp))
-                                Text("MAN", color = CyberCyan, fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                                Text("MAN", color = activePalette.inputPromptColor, fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                            }
+                        }
+
+                        Surface(
+                            modifier = Modifier
+                                .clickable { showThemeModal = true }
+                                .testTag("top_theme_btn"),
+                            color = activePalette.chipBgColor,
+                            shape = RoundedCornerShape(4.dp),
+                            border = androidx.compose.foundation.BorderStroke(0.5.dp, activePalette.warningColor)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.Palette, contentDescription = "Motywy terminala", tint = activePalette.warningColor, modifier = Modifier.size(11.dp))
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Text("THEME", color = activePalette.warningColor, fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
                             }
                         }
 
@@ -353,18 +449,29 @@ fun TerminalScreen(
                             modifier = Modifier
                                 .clickable { showMemoryGridDialog = true }
                                 .testTag("top_mem_grid_btn"),
-                            color = Color(0xFF2E1E3D),
+                            color = activePalette.chipBgColor,
                             shape = RoundedCornerShape(4.dp),
-                            border = androidx.compose.foundation.BorderStroke(0.5.dp, CyberPurple)
+                            border = androidx.compose.foundation.BorderStroke(0.5.dp, activePalette.headerColor)
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Default.GridOn, contentDescription = "Siatka pamięci", tint = CyberPurple, modifier = Modifier.size(11.dp))
+                                Icon(Icons.Default.GridOn, contentDescription = "Siatka pamięci", tint = activePalette.headerColor, modifier = Modifier.size(11.dp))
                                 Spacer(modifier = Modifier.width(2.dp))
-                                Text("MEM GRID", color = CyberPurple, fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                                Text("MEM", color = activePalette.headerColor, fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
                             }
+                        }
+
+                        Surface(
+                            modifier = Modifier
+                                .clickable { showCpuGraph = !showCpuGraph }
+                                .testTag("top_graph_btn"),
+                            color = if (showCpuGraph) activePalette.chipBgColor else activePalette.windowHeaderColor,
+                            shape = RoundedCornerShape(4.dp),
+                            border = androidx.compose.foundation.BorderStroke(0.5.dp, if (showCpuGraph) activePalette.successColor else activePalette.borderColor)
+                        ) {
+                            Text("CHART", color = if (showCpuGraph) activePalette.successColor else TextSecondary, fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp))
                         }
 
                         IconButton(
@@ -373,7 +480,7 @@ fun TerminalScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.DeleteSweep,
-                                contentDescription = "Wyczyść konsolę",
+                                contentDescription = "Wyczyść konsolę (Ctrl+L)",
                                 tint = TextMuted,
                                 modifier = Modifier.size(15.dp)
                             )
@@ -385,16 +492,24 @@ fun TerminalScreen(
             // CPU Cycles, Clockspeed & Hardware Limiter Telemetry Visualizer
             CpuHardwareVisualizer(
                 cpuState = terminalEngine.cpuHardwareState,
-                modifier = Modifier.padding(vertical = 4.dp)
+                modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
             )
 
-            // Scrolling Output Area with dynamic keyword highlighting & distinct dmesg format
+            // Real-Time CPU Load Graph (updates on asm/int instruction intensity)
+            AnimatedVisibility(visible = showCpuGraph) {
+                CpuLoadRealtimeGraph(
+                    cpuState = terminalEngine.cpuHardwareState,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+            }
+
+            // Scrolling Output Area with dynamic keyword highlighting & theme colors
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .background(Color(0xFF060913))
-                    .border(1.dp, ConsoleBorder)
+                    .background(activePalette.terminalBoxBg)
+                    .border(1.dp, activePalette.borderColor)
             ) {
                 LazyColumn(
                     state = listState,
@@ -406,21 +521,21 @@ fun TerminalScreen(
                     items(lines) { line ->
                         val isDmesgLog = line.text.startsWith("[") && line.text.contains("]") && line.text.length > 15
                         val baseColor = when {
-                            isDmesgLog && line.type == TerminalLineType.SUCCESS -> CyberGreen
-                            isDmesgLog && line.type == TerminalLineType.ERROR -> CyberPink
-                            isDmesgLog && line.type == TerminalLineType.WARNING -> CyberAmber
-                            isDmesgLog -> Color(0xFF8BA2C4)
-                            line.type == TerminalLineType.INPUT -> CyberCyan
-                            line.type == TerminalLineType.SUCCESS -> CyberGreen
-                            line.type == TerminalLineType.ERROR -> CyberPink
-                            line.type == TerminalLineType.WARNING -> CyberAmber
-                            line.type == TerminalLineType.HEADER -> CyberPurple
-                            line.type == TerminalLineType.SYSTEM -> Color(0xFF93C5FD)
-                            line.type == TerminalLineType.MATRIX -> CyberGreen
-                            else -> TextPrimary
+                            isDmesgLog && line.type == TerminalLineType.SUCCESS -> activePalette.successColor
+                            isDmesgLog && line.type == TerminalLineType.ERROR -> activePalette.errorColor
+                            isDmesgLog && line.type == TerminalLineType.WARNING -> activePalette.warningColor
+                            isDmesgLog -> activePalette.dmesgColor
+                            line.type == TerminalLineType.INPUT -> activePalette.inputPromptColor
+                            line.type == TerminalLineType.SUCCESS -> activePalette.successColor
+                            line.type == TerminalLineType.ERROR -> activePalette.errorColor
+                            line.type == TerminalLineType.WARNING -> activePalette.warningColor
+                            line.type == TerminalLineType.HEADER -> activePalette.headerColor
+                            line.type == TerminalLineType.SYSTEM -> activePalette.systemColor
+                            line.type == TerminalLineType.MATRIX -> activePalette.successColor
+                            else -> activePalette.defaultTextColor
                         }
 
-                        val annotated = highlightTerminalKeywords(line.text, baseColor)
+                        val annotated = highlightTerminalKeywords(line.text, baseColor, activePalette)
 
                         Text(
                             text = annotated,
@@ -436,8 +551,8 @@ fun TerminalScreen(
             // Tab-Completion Helper Bar & Command History Navigation ('Up'/'Down' arrows)
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-                color = Color(0xFF090F1E),
-                border = androidx.compose.foundation.BorderStroke(1.dp, ConsoleBorder)
+                color = activePalette.windowHeaderColor,
+                border = androidx.compose.foundation.BorderStroke(1.dp, activePalette.borderColor)
             ) {
                 Row(
                     modifier = Modifier
@@ -450,7 +565,7 @@ fun TerminalScreen(
                         onClick = { navigateHistoryUp() },
                         modifier = Modifier.size(26.dp).testTag("history_up_btn")
                     ) {
-                        Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Historia w górę", tint = if (commandHistory.isNotEmpty()) CyberCyan else TextMuted, modifier = Modifier.size(17.dp))
+                        Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Historia w górę", tint = if (commandHistory.isNotEmpty()) activePalette.inputPromptColor else TextMuted, modifier = Modifier.size(17.dp))
                     }
 
                     // History Down arrow button (cycles to newer commands)
@@ -458,8 +573,38 @@ fun TerminalScreen(
                         onClick = { navigateHistoryDown() },
                         modifier = Modifier.size(26.dp).testTag("history_down_btn")
                     ) {
-                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Historia w dół", tint = if (historyIndex >= 0) CyberCyan else TextMuted, modifier = Modifier.size(17.dp))
+                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Historia w dół", tint = if (historyIndex >= 0) activePalette.inputPromptColor else TextMuted, modifier = Modifier.size(17.dp))
                     }
+
+                    // Quick Ctrl+C & Ctrl+L on-screen buttons
+                    Surface(
+                        modifier = Modifier
+                            .clickable {
+                                currentInput = ""
+                                onExecuteCommand("interrupt")
+                            }
+                            .testTag("ctrl_c_btn"),
+                        color = Color(0xFF2A1420),
+                        shape = RoundedCornerShape(4.dp),
+                        border = androidx.compose.foundation.BorderStroke(0.5.dp, activePalette.errorColor)
+                    ) {
+                        Text("^C", color = activePalette.errorColor, fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
+                    }
+
+                    Spacer(modifier = Modifier.width(3.dp))
+
+                    Surface(
+                        modifier = Modifier
+                            .clickable { onExecuteCommand("clear") }
+                            .testTag("ctrl_l_btn"),
+                        color = activePalette.chipBgColor,
+                        shape = RoundedCornerShape(4.dp),
+                        border = androidx.compose.foundation.BorderStroke(0.5.dp, activePalette.inputPromptColor)
+                    ) {
+                        Text("^L", color = activePalette.inputPromptColor, fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
+                    }
+
+                    Spacer(modifier = Modifier.width(3.dp))
 
                     // TAB Completion button
                     Surface(
@@ -470,17 +615,17 @@ fun TerminalScreen(
                                 }
                             }
                             .testTag("tab_completion_btn"),
-                        color = Color(0xFF1E293D),
+                        color = activePalette.chipBgColor,
                         shape = RoundedCornerShape(4.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, CyberCyan)
+                        border = androidx.compose.foundation.BorderStroke(1.dp, activePalette.inputPromptColor)
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(Icons.AutoMirrored.Filled.KeyboardTab, contentDescription = "Tab Autouzupełnianie", tint = CyberCyan, modifier = Modifier.size(11.dp))
+                            Icon(Icons.AutoMirrored.Filled.KeyboardTab, contentDescription = "Tab Autouzupełnianie", tint = activePalette.inputPromptColor, modifier = Modifier.size(11.dp))
                             Spacer(modifier = Modifier.width(2.dp))
-                            Text("TAB", color = CyberCyan, fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                            Text("TAB", color = activePalette.inputPromptColor, fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
                         }
                     }
 
@@ -497,7 +642,9 @@ fun TerminalScreen(
                             val isPath = suggestion.startsWith("/")
                             val isMem = suggestion in listOf("mem", "reg", "0x7C00", "0x9C000", "0xB8000", "eax", "cr0")
                             val isAsm = suggestion in listOf("asm", "nop", "cli", "hlt", "mov", "xor")
-                            val isDmesg = suggestion == "dmesg"
+                            val isPs = suggestion == "ps" || suggestion == "dmesg"
+                            val isTheme = suggestion in listOf("theme", "green", "amber", "mono", "cyber", "solarized")
+
                             Surface(
                                 modifier = Modifier
                                     .clickable {
@@ -508,29 +655,32 @@ fun TerminalScreen(
                                     isPath -> Color(0xFF1B2A1E)
                                     isMem -> Color(0xFF281E3B)
                                     isAsm -> Color(0xFF3B281E)
-                                    isDmesg -> Color(0xFF122338)
-                                    else -> Color(0xFF131F33)
+                                    isPs -> Color(0xFF1F3A2E)
+                                    isTheme -> Color(0xFF332A18)
+                                    else -> activePalette.chipBgColor
                                 },
                                 shape = RoundedCornerShape(4.dp),
                                 border = androidx.compose.foundation.BorderStroke(
                                     0.5.dp,
                                     when {
-                                        isPath -> CyberGreen
-                                        isMem -> CyberPurple
-                                        isAsm -> CyberAmber
-                                        isDmesg -> Color(0xFF60A5FA)
-                                        else -> Color(0xFF1E3A5F)
+                                        isPath -> activePalette.successColor
+                                        isMem -> activePalette.headerColor
+                                        isAsm -> activePalette.warningColor
+                                        isPs -> activePalette.successColor
+                                        isTheme -> activePalette.warningColor
+                                        else -> activePalette.chipBorderColor
                                     }
                                 )
                             ) {
                                 Text(
                                     text = suggestion,
                                     color = when {
-                                        isPath -> CyberGreen
-                                        isMem -> CyberPurple
-                                        isAsm -> CyberAmber
-                                        isDmesg -> Color(0xFF93C5FD)
-                                        else -> CyberCyan
+                                        isPath -> activePalette.successColor
+                                        isMem -> activePalette.headerColor
+                                        isAsm -> activePalette.warningColor
+                                        isPs -> activePalette.successColor
+                                        isTheme -> activePalette.warningColor
+                                        else -> activePalette.chipTextColor
                                     },
                                     fontSize = 11.sp,
                                     fontFamily = FontFamily.Monospace,
@@ -543,12 +693,12 @@ fun TerminalScreen(
                 }
             }
 
-            // Interactive Input Prompt Bar with Hardware/Soft Keyboard Up/Down Arrow Interceptor
+            // Interactive Input Prompt Bar
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-                color = Color(0xFF080D1A),
+                color = activePalette.backgroundColor,
                 shape = RoundedCornerShape(bottomStart = 10.dp, bottomEnd = 10.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, ConsoleBorder)
+                border = androidx.compose.foundation.BorderStroke(1.dp, activePalette.borderColor)
             ) {
                 Row(
                     modifier = Modifier
@@ -558,7 +708,7 @@ fun TerminalScreen(
                 ) {
                     Text(
                         text = promptPrefix,
-                        color = CyberGreen,
+                        color = activePalette.inputPromptColor,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace
@@ -574,6 +724,17 @@ fun TerminalScreen(
                             .weight(1f)
                             .onPreviewKeyEvent { keyEvent ->
                                 if (keyEvent.type == KeyEventType.KeyDown) {
+                                    // Ctrl+L shortcut -> Clear screen
+                                    if (keyEvent.isCtrlPressed && keyEvent.key == Key.L) {
+                                        onExecuteCommand("clear")
+                                        return@onPreviewKeyEvent true
+                                    }
+                                    // Ctrl+C shortcut -> Interrupt process / SIGINT
+                                    if (keyEvent.isCtrlPressed && keyEvent.key == Key.C) {
+                                        currentInput = ""
+                                        onExecuteCommand("interrupt")
+                                        return@onPreviewKeyEvent true
+                                    }
                                     when (keyEvent.key) {
                                         Key.DirectionUp -> {
                                             navigateHistoryUp()
@@ -595,11 +756,11 @@ fun TerminalScreen(
                             }
                             .testTag("terminal_input_field"),
                         textStyle = TextStyle(
-                            color = TextPrimary,
+                            color = activePalette.defaultTextColor,
                             fontSize = 13.sp,
                             fontFamily = FontFamily.Monospace
                         ),
-                        cursorBrush = SolidColor(CyberGreen),
+                        cursorBrush = SolidColor(activePalette.cursorColor),
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                         keyboardActions = KeyboardActions(
@@ -636,7 +797,7 @@ fun TerminalScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Send,
                             contentDescription = "Wyślij polecenie",
-                            tint = CyberGreen,
+                            tint = activePalette.inputPromptColor,
                             modifier = Modifier.size(17.dp)
                         )
                     }
@@ -645,7 +806,126 @@ fun TerminalScreen(
         }
     }
 
-    // 1. Interactive Memory Grid Dialog with Clickable Hex Cells
+    // 1. Terminal Color Scheme Picker Modal Dialog
+    if (showThemeModal) {
+        AlertDialog(
+            onDismissRequest = { showThemeModal = false },
+            title = {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Palette, contentDescription = null, tint = activePalette.warningColor, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "SCHEMATY KOLORÓW TERMINALA",
+                            color = activePalette.warningColor,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                    IconButton(onClick = { showThemeModal = false }) {
+                        Icon(Icons.Default.Close, contentDescription = "Zamknij", tint = TextMuted)
+                    }
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Wybierz estetykę terminala inspirowaną historycznymi monitorami i nowoczesnym cyberpunkiem:",
+                        color = TextSecondary,
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+
+                    TerminalThemes.allPalettes.forEach { paletteItem ->
+                        val isSelected = activePalette.id == paletteItem.id
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    terminalEngine.currentThemeId = paletteItem.id.key
+                                    selectedThemeKey = paletteItem.id.key
+                                    onExecuteCommand("theme ${paletteItem.id.key.lowercase()}")
+                                    showThemeModal = false
+                                }
+                                .testTag("theme_card_${paletteItem.id.key}"),
+                            color = paletteItem.windowHeaderColor,
+                            shape = RoundedCornerShape(8.dp),
+                            border = androidx.compose.foundation.BorderStroke(
+                                if (isSelected) 2.dp else 1.dp,
+                                if (isSelected) paletteItem.inputPromptColor else paletteItem.borderColor
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = paletteItem.name,
+                                            color = paletteItem.inputPromptColor,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            fontFamily = FontFamily.Monospace
+                                        )
+                                        if (isSelected) {
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = "✔ AKTYWNY",
+                                                color = paletteItem.successColor,
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                fontFamily = FontFamily.Monospace
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = paletteItem.id.subtitle,
+                                        color = paletteItem.defaultTextColor,
+                                        fontSize = 10.sp,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                }
+
+                                // Color sample dots
+                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Box(modifier = Modifier.size(14.dp).background(paletteItem.backgroundColor, CircleShape).border(1.dp, Color.White, CircleShape))
+                                    Box(modifier = Modifier.size(14.dp).background(paletteItem.inputPromptColor, CircleShape))
+                                    Box(modifier = Modifier.size(14.dp).background(paletteItem.successColor, CircleShape))
+                                    Box(modifier = Modifier.size(14.dp).background(paletteItem.warningColor, CircleShape))
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { showThemeModal = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = activePalette.inputPromptColor)
+                ) {
+                    Text("Zamknij", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                }
+            },
+            containerColor = activePalette.windowHeaderColor
+        )
+    }
+
+    // 2. Interactive Memory Grid Dialog with Clickable Hex Cells
     if (showMemoryGridDialog) {
         AlertDialog(
             onDismissRequest = { showMemoryGridDialog = false },
@@ -656,9 +936,9 @@ fun TerminalScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.GridOn, contentDescription = null, tint = CyberPurple, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.GridOn, contentDescription = null, tint = activePalette.headerColor, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("INTERAKTYWNA SIATKA PAMIĘCI RAM", color = CyberPurple, fontSize = 12.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                        Text("INTERAKTYWNA SIATKA PAMIĘCI RAM", color = activePalette.headerColor, fontSize = 12.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
                     }
                     IconButton(onClick = { showMemoryGridDialog = false }) {
                         Icon(Icons.Default.Close, contentDescription = "Zamknij", tint = TextMuted)
@@ -679,7 +959,7 @@ fun TerminalScreen(
                         fontFamily = FontFamily.Monospace
                     )
 
-                    val memory = terminalEngine.getMemoryMap()
+                    val memory = terminalEngine.memoryMap
                     memory.forEach { (addr, bytes) ->
                         val label = when (addr) {
                             0x7C00L -> "MBR BOOT SECTOR (0x7C00)"
@@ -691,14 +971,14 @@ fun TerminalScreen(
 
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
-                            color = Color(0xFF0C1424),
+                            color = activePalette.terminalBoxBg,
                             shape = RoundedCornerShape(8.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E293B))
+                            border = androidx.compose.foundation.BorderStroke(1.dp, activePalette.borderColor)
                         ) {
                             Column(modifier = Modifier.padding(6.dp)) {
                                 Text(
                                     text = label,
-                                    color = CyberCyan,
+                                    color = activePalette.inputPromptColor,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     fontFamily = FontFamily.Monospace
@@ -726,11 +1006,11 @@ fun TerminalScreen(
                                                             editingHexInput = hexVal
                                                         }
                                                         .testTag("byte_cell_${addr}_$byteOffset"),
-                                                    color = if (isSpecial) Color(0xFF22163B) else Color(0xFF090E1A),
+                                                    color = if (isSpecial) activePalette.chipBgColor else activePalette.backgroundColor,
                                                     shape = RoundedCornerShape(3.dp),
                                                     border = androidx.compose.foundation.BorderStroke(
                                                         1.dp,
-                                                        if (isSpecial) CyberPurple else Color(0xFF1F293D)
+                                                        if (isSpecial) activePalette.headerColor else activePalette.borderColor
                                                     )
                                                 ) {
                                                     Box(
@@ -739,7 +1019,7 @@ fun TerminalScreen(
                                                     ) {
                                                         Text(
                                                             text = hexVal,
-                                                            color = if (isSpecial) CyberPurple else TextPrimary,
+                                                            color = if (isSpecial) activePalette.headerColor else activePalette.defaultTextColor,
                                                             fontSize = 10.sp,
                                                             fontFamily = FontFamily.Monospace,
                                                             fontWeight = FontWeight.Bold
@@ -758,16 +1038,16 @@ fun TerminalScreen(
             confirmButton = {
                 Button(
                     onClick = { showMemoryGridDialog = false },
-                    colors = ButtonDefaults.buttonColors(containerColor = CyberPurple)
+                    colors = ButtonDefaults.buttonColors(containerColor = activePalette.headerColor)
                 ) {
                     Text("Zamknij", color = Color.White, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
                 }
             },
-            containerColor = Color(0xFF090E1A)
+            containerColor = activePalette.windowHeaderColor
         )
     }
 
-    // 2. Inline Byte Hex Value Editor Sub-Dialog
+    // 3. Inline Byte Hex Value Editor Sub-Dialog
     if (editingAddress != null) {
         val targetAddr = editingAddress!!
         AlertDialog(
@@ -775,7 +1055,7 @@ fun TerminalScreen(
             title = {
                 Text(
                     text = "EDYTUJ BAJT PAMIĘCI (0x${java.lang.Long.toHexString(targetAddr).uppercase()}[+$editingByteIndex])",
-                    color = CyberCyan,
+                    color = activePalette.inputPromptColor,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.Monospace
@@ -789,10 +1069,10 @@ fun TerminalScreen(
                         onValueChange = { if (it.length <= 2) editingHexInput = it.uppercase() },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = CyberCyan,
-                            unfocusedBorderColor = ConsoleBorder,
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary
+                            focusedBorderColor = activePalette.inputPromptColor,
+                            unfocusedBorderColor = activePalette.borderColor,
+                            focusedTextColor = activePalette.defaultTextColor,
+                            unfocusedTextColor = activePalette.defaultTextColor
                         ),
                         textStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 14.sp)
                     )
@@ -811,7 +1091,7 @@ fun TerminalScreen(
                         }
                         editingAddress = null
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = CyberCyan)
+                    colors = ButtonDefaults.buttonColors(containerColor = activePalette.inputPromptColor)
                 ) {
                     Text("Zapisz", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
@@ -819,16 +1099,16 @@ fun TerminalScreen(
             dismissButton = {
                 Button(
                     onClick = { editingAddress = null },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E293B))
+                    colors = ButtonDefaults.buttonColors(containerColor = activePalette.chipBgColor)
                 ) {
                     Text("Anuluj", color = TextSecondary, fontSize = 11.sp)
                 }
             },
-            containerColor = Color(0xFF0B101D)
+            containerColor = activePalette.windowHeaderColor
         )
     }
 
-    // 3. Unix 'man' Manual Viewer Modal
+    // 4. Unix 'man' Manual Viewer Modal
     if (showManModal) {
         AlertDialog(
             onDismissRequest = { showManModal = false },
@@ -839,9 +1119,9 @@ fun TerminalScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = null, tint = CyberCyan, modifier = Modifier.size(18.dp))
+                        Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = null, tint = activePalette.inputPromptColor, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("PODRĘCZNIK SYSTEMOWY GENESIS OS", color = CyberCyan, fontSize = 12.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                        Text("PODRĘCZNIK SYSTEMOWY GENESIS OS", color = activePalette.inputPromptColor, fontSize = 12.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
                     }
                     IconButton(onClick = { showManModal = false }) {
                         Icon(Icons.Default.Close, contentDescription = "Zamknij", tint = TextMuted)
@@ -862,16 +1142,16 @@ fun TerminalScreen(
                             .padding(bottom = 6.dp),
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        listOf("man", "dmesg", "mem", "asm", "whoami", "build", "test", "boot", "quests", "ai").forEach { mCmd ->
+                        listOf("man", "ps", "dmesg", "theme", "uptime", "chmod", "df", "grep", "mem", "asm", "whoami", "build", "test", "boot", "quests", "ai").forEach { mCmd ->
                             Surface(
                                 modifier = Modifier.clickable { selectedManPage = mCmd },
-                                color = if (selectedManPage == mCmd) CyberCyanDark else Color(0xFF131D31),
+                                color = if (selectedManPage == mCmd) activePalette.inputPromptColor else activePalette.chipBgColor,
                                 shape = RoundedCornerShape(4.dp),
-                                border = androidx.compose.foundation.BorderStroke(0.5.dp, if (selectedManPage == mCmd) CyberCyan else Color(0xFF1E3A5F))
+                                border = androidx.compose.foundation.BorderStroke(0.5.dp, if (selectedManPage == mCmd) activePalette.inputPromptColor else activePalette.chipBorderColor)
                             ) {
                                 Text(
                                     text = mCmd,
-                                    color = if (selectedManPage == mCmd) Color.Black else CyberCyan,
+                                    color = if (selectedManPage == mCmd) Color.Black else activePalette.inputPromptColor,
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
                                     fontFamily = FontFamily.Monospace,
@@ -886,9 +1166,9 @@ fun TerminalScreen(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth(),
-                        color = Color(0xFF060913),
+                        color = activePalette.terminalBoxBg,
                         shape = RoundedCornerShape(6.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, ConsoleBorder)
+                        border = androidx.compose.foundation.BorderStroke(1.dp, activePalette.borderColor)
                     ) {
                         val manLines = remember(selectedManPage) {
                             terminalEngine.getManualPage(selectedManPage)
@@ -902,11 +1182,11 @@ fun TerminalScreen(
                         ) {
                             items(manLines) { ml ->
                                 val color = when (ml.type) {
-                                    TerminalLineType.HEADER -> CyberCyan
-                                    TerminalLineType.SYSTEM -> CyberAmber
-                                    TerminalLineType.SUCCESS -> CyberGreen
-                                    TerminalLineType.ERROR -> CyberPink
-                                    else -> TextPrimary
+                                    TerminalLineType.HEADER -> activePalette.inputPromptColor
+                                    TerminalLineType.SYSTEM -> activePalette.warningColor
+                                    TerminalLineType.SUCCESS -> activePalette.successColor
+                                    TerminalLineType.ERROR -> activePalette.errorColor
+                                    else -> activePalette.defaultTextColor
                                 }
                                 Text(
                                     text = ml.text,
@@ -923,12 +1203,12 @@ fun TerminalScreen(
             confirmButton = {
                 Button(
                     onClick = { showManModal = false },
-                    colors = ButtonDefaults.buttonColors(containerColor = CyberCyan)
+                    colors = ButtonDefaults.buttonColors(containerColor = activePalette.inputPromptColor)
                 ) {
                     Text("Zamknij", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
             },
-            containerColor = Color(0xFF090E1A)
+            containerColor = activePalette.windowHeaderColor
         )
     }
 }
