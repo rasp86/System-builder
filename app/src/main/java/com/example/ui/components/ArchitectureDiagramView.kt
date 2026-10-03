@@ -61,7 +61,9 @@ import com.example.ui.theme.TextSecondary
 fun ArchitectureDiagramView(
     modifier: Modifier = Modifier,
     completedQuestIds: Set<String>,
-    cpuRegisters: CpuRegisters
+    cpuRegisters: CpuRegisters,
+    osName: String = "GenesisOS",
+    currentPhase: Int = 1
 ) {
     var selectedLayerDetail by remember { mutableStateOf<String?>(null) }
 
@@ -73,10 +75,19 @@ fun ArchitectureDiagramView(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
+        // OS Specification & Architecture Info Panel
+        OsInfoPanel(
+            osName = osName,
+            currentPhase = currentPhase,
+            cpuArch = "x86_64 / IA-32 (Protected Mode)",
+            memoryCapacity = "64 MB Physical RAM (4KB 2-Level Paging)",
+            filesystemType = "GenesisFS / Virtual VFS (Inodes & Superblock)"
+        )
+
         Text(
             text = "DIAGRAM ARCHITEKTURY SYSTEMU OPERACYJNEGO",
             color = CyberCyan,
-            fontSize = 14.sp,
+            fontSize = 13.sp,
             fontWeight = FontWeight.Bold,
             fontFamily = FontFamily.Monospace
         )

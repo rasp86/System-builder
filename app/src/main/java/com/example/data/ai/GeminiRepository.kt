@@ -97,7 +97,8 @@ class GeminiRepository {
                         "Weryfikacja barier synchronizacji i obsługi przerwań",
                         "Optymalizacja struktur jądra i wywołań systemowych"
                     ),
-                    isThinkingModelUsed = true
+                    isThinkingModelUsed = true,
+                    sourceType = AiSourceType.ONLINE_PRO_THINKING
                 )
             }
         } catch (e: HttpException) {
@@ -125,7 +126,8 @@ class GeminiRepository {
                         "Szybka analiza architektury i struktur jądra",
                         "Weryfikacja instrukcji i bezpieczeństwa pamięci"
                     ),
-                    isThinkingModelUsed = true
+                    isThinkingModelUsed = false,
+                    sourceType = AiSourceType.ONLINE_FLASH
                 )
             }
         } catch (e: Exception) {
@@ -261,7 +263,8 @@ class GeminiRepository {
         return AiMentorResult(
             replyText = response,
             reasoningSteps = reasoning,
-            isThinkingModelUsed = true
+            isThinkingModelUsed = true,
+            sourceType = AiSourceType.OFFLINE_REASONING
         )
     }
 }

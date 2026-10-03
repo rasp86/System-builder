@@ -15,7 +15,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             MyApplicationTheme {
-                val gameViewModel: GameViewModel = viewModel()
+                val gameViewModel: GameViewModel = viewModel(factory = GameViewModel.Factory)
                 MainGameScreen(viewModel = gameViewModel)
             }
         }

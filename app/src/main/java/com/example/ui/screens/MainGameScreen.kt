@@ -397,7 +397,9 @@ fun MainGameScreen(
                 AppTab.ARCHITECTURE -> {
                     ArchitectureDiagramView(
                         completedQuestIds = completedIds,
-                        cpuRegisters = cpuRegisters
+                        cpuRegisters = cpuRegisters,
+                        osName = gameSave?.osName ?: "GenesisOS",
+                        currentPhase = gameSave?.currentPhase ?: 1
                     )
                 }
 

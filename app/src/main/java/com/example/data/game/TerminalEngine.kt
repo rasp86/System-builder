@@ -24,6 +24,7 @@ class TerminalEngine {
     val vfsManager = VirtualFileSystemManager()
     val cpuSimulator = HardwareCpuSimulator(dmesgBuffer)
     val processScheduler = ProcessScheduler(dmesgBuffer)
+    val commandRegistry: com.example.game.terminal.TerminalCommandRegistry = com.example.game.terminal.DefaultTerminalCommandRegistry.create()
 
     // Delegated properties for complete compatibility
     val customAliases: MutableMap<String, String> get() = vfsManager.customAliases

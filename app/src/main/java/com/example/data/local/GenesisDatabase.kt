@@ -20,7 +20,7 @@ abstract class GenesisDatabase : RoomDatabase() {
                     context.applicationContext,
                     GenesisDatabase::class.java,
                     "genesis_os.db"
-                ).fallbackToDestructiveMigration().build()
+                ).fallbackToDestructiveMigration(true).build()
                 INSTANCE = instance
                 instance
             }

@@ -12,21 +12,24 @@ import com.example.data.game.OSBootStatus
 import com.example.data.game.OSProcess
 import com.example.data.game.Quest
 import com.example.data.game.QuestsData
+import com.example.domain.repository.GameDomainRepository
+import com.example.domain.validator.GameStateValidator
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
 
 class GameRepository(
     private val database: AppDatabase,
-    private val aiMentorService: AiMentorService = GeminiAiMentorService()
-) {
+    private val aiMentorService: AiMentorService = GeminiAiMentorService(),
+    private val validator: GameStateValidator = GameStateValidator()
+) : GameDomainRepository {
     private val gameDao = database.gameDao()
 
-    val gameSave: Flow<GameSaveEntity?> = gameDao.getGameSave()
-    val allQuests: Flow<List<QuestProgressEntity>> = gameDao.getAllQuests()
-    val allFiles: Flow<List<VirtualFileEntity>> = gameDao.getAllFiles()
-    val aiMessages: Flow<List<AiMessageEntity>> = gameDao.getAllAiMessages()
+    override val gameSave: Flow<GameSaveEntity?> = gameDao.getGameSave()
+    override val allQuests: Flow<List<QuestProgressEntity>> = gameDao.getAllQuests()
+    override val allFiles: Flow<List<VirtualFileEntity>> = gameDao.getAllFiles()
+    override val aiMessages: Flow<List<AiMessageEntity>> = gameDao.getAllAiMessages()
 
-    suspend fun initializeGameIfNeeded() {
+    override suspend fun initializeGameIfNeeded() {
         var save = gameDao.getGameSaveSync()
         if (save == null) {
             save = GameSaveEntity(
@@ -72,44 +75,46 @@ class GameRepository(
         gameDao.insertFilesIfNotExist(initialFiles)
     }
 
-    suspend fun getQuestById(questId: String): QuestProgressEntity? {
+    override suspend fun getQuestById(questId: String): QuestProgressEntity? {
         return gameDao.getQuestById(questId)
     }
 
-    suspend fun saveUserCode(questId: String, code: String, filePath: String) {
+    override suspend fun saveUserCode(questId: String, code: String, filePath: String) {
         val currentQuest = gameDao.getQuestById(questId)
         if (currentQuest != null) {
-            gameDao.insertOrUpdateQuest(currentQuest.copy(userCode = code))
+            val updated = currentQuest.copy(userCode = code)
+            validator.validateQuestProgress(updated)
+            gameDao.insertOrUpdateQuest(updated)
         }
-        gameDao.insertOrUpdateFile(
-            VirtualFileEntity(
-                path = filePath,
-                fileName = filePath.substringAfterLast('/'),
-                content = code,
-                language = when {
-                    filePath.endsWith(".asm") -> "asm"
-                    filePath.endsWith(".c") -> "c"
-                    filePath.endsWith(".h") -> "h"
-                    else -> "txt"
-                },
-                isKernelCore = true,
-                lastModified = System.currentTimeMillis()
-            )
+        val fileEntity = VirtualFileEntity(
+            path = filePath,
+            fileName = filePath.substringAfterLast('/'),
+            content = code,
+            language = when {
+                filePath.endsWith(".asm") -> "asm"
+                filePath.endsWith(".c") -> "c"
+                filePath.endsWith(".h") -> "h"
+                else -> "txt"
+            },
+            isKernelCore = true,
+            lastModified = System.currentTimeMillis()
         )
+        validator.validateVirtualFile(fileEntity)
+        gameDao.insertOrUpdateFile(fileEntity)
     }
 
-    suspend fun completeQuest(questId: String, stars: Int = 3): Pair<Int, Int> {
+    override suspend fun completeQuest(questId: String, stars: Int): Pair<Int, Int> {
         val quest = QuestsData.allQuests.find { it.id == questId } ?: return (0 to 0)
         val questProgress = gameDao.getQuestById(questId) ?: return (0 to 0)
 
         if (!questProgress.isCompleted) {
-            gameDao.insertOrUpdateQuest(
-                questProgress.copy(
-                    isCompleted = true,
-                    stars = stars,
-                    completedAt = System.currentTimeMillis()
-                )
+            val updatedQuest = questProgress.copy(
+                isCompleted = true,
+                stars = stars,
+                completedAt = System.currentTimeMillis()
             )
+            validator.validateQuestProgress(updatedQuest)
+            gameDao.insertOrUpdateQuest(updatedQuest)
 
             // Unlock next quest in sequence
             val questList = QuestsData.allQuests
@@ -131,38 +136,38 @@ class GameRepository(
             val newBugs = currentSave.bugsFixed + 1
             val newLines = currentSave.totalLinesWritten + quest.defaultCode.lines().size
 
-            gameDao.updateGameSave(
-                currentSave.copy(
-                    xp = newXp,
-                    bits = newBits,
-                    level = newLevel,
-                    currentPhase = newPhase,
-                    bugsFixed = newBugs,
-                    totalLinesWritten = newLines
-                )
+            val updatedSave = currentSave.copy(
+                xp = newXp,
+                bits = newBits,
+                level = newLevel,
+                currentPhase = newPhase,
+                bugsFixed = newBugs,
+                totalLinesWritten = newLines
             )
+            validator.validateGameSave(updatedSave)
+            gameDao.updateGameSave(updatedSave)
 
             return quest.xpReward to quest.bitsReward
         }
         return (0 to 0)
     }
 
-    suspend fun toggleCrtScanlines() {
+    override suspend fun toggleCrtScanlines() {
         val save = gameDao.getGameSaveSync() ?: return
         gameDao.updateGameSave(save.copy(crtScanlinesEnabled = !save.crtScanlinesEnabled))
     }
 
-    suspend fun updateTerminalColorScheme(schemeKey: String) {
+    override suspend fun updateTerminalColorScheme(schemeKey: String) {
         val save = gameDao.getGameSaveSync() ?: return
         gameDao.updateGameSave(save.copy(terminalColorScheme = schemeKey))
     }
 
-    suspend fun incrementBootCount() {
+    override suspend fun incrementBootCount() {
         val save = gameDao.getGameSaveSync() ?: return
         gameDao.updateGameSave(save.copy(bootCount = save.bootCount + 1))
     }
 
-    suspend fun askAi(prompt: String, currentQuest: Quest?, code: String): AiMentorResult {
+    override suspend fun askAi(prompt: String, currentQuest: Quest?, code: String): AiMentorResult {
         // Save user message in history
         gameDao.insertAiMessage(
             AiMessageEntity(
@@ -193,7 +198,7 @@ class GameRepository(
         return result
     }
 
-    suspend fun clearAiChat() {
+    override suspend fun clearAiChat() {
         gameDao.clearAiHistory()
     }
 }

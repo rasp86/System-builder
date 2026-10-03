@@ -3,6 +3,13 @@ package com.example.data.ai
 import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
 
+enum class AiSourceType(val displayName: String) {
+    ONLINE_PRO_THINKING("Gemini 3.1 Pro (High Thinking)"),
+    ONLINE_FLASH("Gemini 2.5 Flash"),
+    OFFLINE_REASONING("Ada Kernel Engine (Offline)"),
+    ERROR("Błąd połączenia")
+}
+
 @JsonClass(generateAdapter = true)
 data class GeminiRequest(
     @Json(name = "contents") val contents: List<GeminiContent>,
@@ -47,5 +54,6 @@ data class AiMentorResult(
     val replyText: String,
     val reasoningSteps: List<String> = emptyList(),
     val isThinkingModelUsed: Boolean = true,
+    val sourceType: AiSourceType = AiSourceType.OFFLINE_REASONING,
     val error: String? = null
 )

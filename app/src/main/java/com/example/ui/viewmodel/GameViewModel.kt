@@ -1,10 +1,14 @@
 package com.example.ui.viewmodel
 
-import android.app.Application
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import com.example.OsArchitectApplication
 import com.example.data.ai.AiMentorResult
-import com.example.data.db.AppDatabase
+import com.example.data.ai.AiMentorService
+import com.example.data.ai.GeminiAiMentorService
 import com.example.data.db.GameSaveEntity
 import com.example.data.db.QuestProgressEntity
 import com.example.data.game.CpuRegisters
@@ -15,8 +19,8 @@ import com.example.data.game.QuestsData
 import com.example.data.game.TerminalEngine
 import com.example.data.game.TerminalLine
 import com.example.data.game.TerminalLineType
-import com.example.data.local.GenesisDatabase
-import com.example.data.local.OsSnapshotRepository
+import com.example.data.game.quest.QuestVerificationEngine
+import com.example.data.game.vm.VirtualMachineEngine
 import com.example.data.repository.GameRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -44,15 +48,13 @@ data class TestResultItem(
     val message: String
 )
 
-class GameViewModel(application: Application) : AndroidViewModel(application) {
-
-    private val database = AppDatabase.getInstance(application)
-    private val repository = GameRepository(database)
-    private val genesisDb = GenesisDatabase.getInstance(application)
-    private val snapshotRepo = OsSnapshotRepository(genesisDb.osSnapshotDao())
-    private val terminalEngine = TerminalEngine().apply {
-        snapshotRepository = snapshotRepo
-    }
+class GameViewModel(
+    private val repository: GameRepository,
+    val terminalEngine: TerminalEngine,
+    private val vmEngine: VirtualMachineEngine = VirtualMachineEngine(),
+    private val questVerificationEngine: QuestVerificationEngine = QuestVerificationEngine(),
+    private val aiMentorService: AiMentorService = GeminiAiMentorService()
+) : ViewModel() {
 
     val gameSave: StateFlow<GameSaveEntity?> = repository.gameSave
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
@@ -99,6 +101,22 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val _toastEvent = MutableSharedFlow<String>()
     val toastEvent = _toastEvent.asSharedFlow()
 
+    companion object {
+        val Factory: ViewModelProvider.Factory = viewModelFactory {
+            initializer {
+                val application = (this[ViewModelProvider.AndroidViewModelFactory.APPLICATION_KEY] as OsArchitectApplication)
+                val container = application.container
+                GameViewModel(
+                    repository = container.gameRepository,
+                    terminalEngine = container.terminalEngine,
+                    vmEngine = container.vmEngine,
+                    questVerificationEngine = container.questVerificationEngine,
+                    aiMentorService = container.aiMentorService
+                )
+            }
+        }
+    }
+
     private var activeExecutionJob: Job? = null
 
     init {
@@ -116,6 +134,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private fun runTerminalBootSequence() {
         viewModelScope.launch {
             _terminalLines.value = emptyList()
+            // Synthetic PC speaker POST beep when initializing boot sequence
+            com.example.core.audio.KernelSoundManager.playBiosPostBeep()
 
             val bootSequence = listOf(
                 TerminalLine("SeaBIOS (version 1.15.0-rel-0-genesis)...", TerminalLineType.HEADER),
@@ -274,14 +294,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             _isCompiling.value = true
             delay(500)
 
-            val results = currentQuest.testCases.map { tc ->
-                val (passed, message) = tc.check(_editorCode.value)
-                TestResultItem(tc.description, passed, message)
-            }
+            val (results, allPassed) = questVerificationEngine.runTests(currentQuest, _editorCode.value)
             _testResults.value = results
             _isCompiling.value = false
 
-            val allPassed = results.all { it.isPassed }
             val logLines = mutableListOf<TerminalLine>()
             logLines.add(TerminalLine("=== WYNIKI TESTÓW JEDNOSTKOWYCH DLA ${currentQuest.id} ===", TerminalLineType.HEADER))
 
@@ -315,6 +331,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             _vmLogs.value = emptyList()
             _guestTerminalLines.value = emptyList()
 
+            // Synthetic PC speaker POST beep when initializing boot sequence
+            com.example.core.audio.KernelSoundManager.playBiosPostBeep()
+
             val bootSequence = OsSimulationEngine.generateBootSequence(osName, completedIds)
 
             for (log in bootSequence) {
@@ -324,10 +343,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
             if (bootSequence.any { it.contains("PANIC") || it.contains("FATAL") }) {
                 _vmStatus.value = OSBootStatus.KERNEL_PANIC
+                com.example.core.audio.KernelSoundManager.playKernelPanicBeep()
             } else if (completedIds.contains("Q8_1_GUI_FRAMEBUFFER")) {
                 _vmStatus.value = OSBootStatus.RUNNING_GUI
+                com.example.core.audio.KernelSoundManager.playKernelBootChime()
             } else {
                 _vmStatus.value = OSBootStatus.RUNNING_CLI
+                com.example.core.audio.KernelSoundManager.playKernelBootChime()
                 _guestTerminalLines.value = listOf(
                     TerminalLine("$osName Kernel v1.0.0 Ready. Type 'help' for commands.", TerminalLineType.SUCCESS),
                     TerminalLine("gsh root@genesis:/# ", TerminalLineType.SYSTEM)
@@ -416,4 +438,33 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             repository.clearAiChat()
         }
     }
+
+    // Feature ViewModel accessors for granular screen consumption (Phase 5)
+    fun getTerminalVm(): TerminalViewModel = TerminalViewModel(
+        executeTerminalUseCase = com.example.domain.usecase.ExecuteTerminalCommandUseCase(terminalEngine),
+        repository = repository,
+        terminalEngine = terminalEngine
+    )
+
+    fun getQuestVm(): QuestViewModel = QuestViewModel(
+        completeQuestUseCase = com.example.domain.usecase.CompleteQuestUseCase(repository),
+        questProvider = com.example.data.questprovider.QuestRepositoryImpl(),
+        repository = repository
+    )
+
+    fun getEditorVm(): EditorViewModel = EditorViewModel(
+        runTestsUseCase = com.example.domain.usecase.RunQuestTestsUseCase(questVerificationEngine),
+        saveCodeUseCase = com.example.domain.usecase.SaveUserCodeUseCase(repository),
+        repository = repository
+    )
+
+    fun getVmViewModel(): VirtualMachineViewModel = VirtualMachineViewModel(
+        bootVmUseCase = com.example.domain.usecase.BootVirtualMachineUseCase(vmEngine),
+        repository = repository
+    )
+
+    fun getAiMentorVm(): AiMentorViewModel = AiMentorViewModel(
+        askAiUseCase = com.example.domain.usecase.AskAiMentorUseCase(repository),
+        repository = repository
+    )
 }

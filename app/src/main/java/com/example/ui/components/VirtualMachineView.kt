@@ -4,6 +4,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -459,17 +461,31 @@ fun GraphicalDesktopView(
                                 }
 
                                 "sysmon" -> {
-                                    Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Text("CPU 0: 12% | CPU 1: 8% (x86_64 Virtual SMP)", color = CyberCyan, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-                                        Box(modifier = Modifier.fillMaxWidth().height(12.dp).background(Color(0xFF0F172A), RoundedCornerShape(4.dp))) {
-                                            Box(modifier = Modifier.fillMaxWidth(0.12f).height(12.dp).background(CyberGreen, RoundedCornerShape(4.dp)))
-                                        }
-                                        Text("RAM Fizyczny: 15.2 MB / 64 MB (23%)", color = CyberAmber, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-                                        Box(modifier = Modifier.fillMaxWidth().height(12.dp).background(Color(0xFF0F172A), RoundedCornerShape(4.dp))) {
-                                            Box(modifier = Modifier.fillMaxWidth(0.23f).height(12.dp).background(CyberAmber, RoundedCornerShape(4.dp)))
-                                        }
-                                        Text("Wirtualna Pamięć MMU: 4096 KB Identity Mapped", color = CyberPurple, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-                                        Text("Procesy aktywne w Ring 3: 4 zadania", color = TextSecondary, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .verticalScroll(rememberScrollState()),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        OsResourceDashboard(
+                                            simulatedRamMb = 64f,
+                                            simulatedRamUsedMb = 18.4f,
+                                            diskReadKbps = 1850f,
+                                            diskWriteKbps = 720f,
+                                            title = "VIRTUAL PC SYSTEM MONITOR"
+                                        )
+                                        Text(
+                                            text = "Virtual Memory MMU: 4096 KB Identity Mapped (Paging CR0.PG=1)",
+                                            color = CyberPurple,
+                                            fontSize = 11.sp,
+                                            fontFamily = FontFamily.Monospace
+                                        )
+                                        Text(
+                                            text = "Processes active in Ring 3: 4 tasks (scheduler: Round-Robin)",
+                                            color = TextSecondary,
+                                            fontSize = 11.sp,
+                                            fontFamily = FontFamily.Monospace
+                                        )
                                     }
                                 }
 
